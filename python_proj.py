@@ -23,6 +23,12 @@ for i in range(3):
 for j in range(4):
     GPIO.setup(row[j],GPIO.IN,pull_up_down=GPIO.PUD_UP)
 
+class products():
+    def __init__(self,name,id,price,quantity):
+        self.name=name
+        self.id=id
+        self.price=price
+        self.quantity=quantity
 
 def normal():
     #led display 'Welcome' and 'Select the product'
