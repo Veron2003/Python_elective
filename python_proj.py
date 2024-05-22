@@ -1,5 +1,6 @@
 import RPi.GPIO as GPIO
 import sys
+import spidev
 from time import *
 import requests
 import json
