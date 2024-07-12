@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vending Machine Status</title>
+</head>
+<body>
+    <h1>Vending Machine Status</h1>
+    <p>Humidity: {{ humidity }}%</p>
+    <p>Temperature: {{ temperature }}°C</p>
+
+    <h2>Stock Count</h2>
+    <ul>
+        {% for item, details in stock.items() %}
+            <li>
+                <img src="{{ details['image'] }}" alt="{{ item }}" width="100">
+                {{ item }}: {{ details['count'] }} (Expiry Date: {{ details['expiry_date'] }})
+            </li>
+        {% endfor %}
+    </ul>
+
+    <form action="/update_stock" method="post">
+        <label for="item">Item Type:</label>
+        <input type="text" id="item" name="item" required><br><br>
+        <label for="stock_count">Stock Count:</label>
+        <input type="number" id="stock_count" name="stock_count" required><br><br>
+        <label for="expiry_date">Expiry Date:</label>
+        <input type="date" id="expiry_date" name="expiry_date" required><br><br>
+        <input type="submit" value="Update Stock and Expiry Date">
+    </form>
+</body>
+</html>
+from flask import Flask, render_template, request
+
+app = Flask(__name__)
+
+# Initial values
+stock = {
+    'Paracetamol': {'count': 42, 'expiry_date': '2027-12-31', 'image': 'static/paracetamol_tablets_500mg.webp'},
+    'Menstrual pad': {'count': 30, 'expiry_date': '2025-12-31', 'image': 'https://i.pinimg.com/originals/b6/f0/f9/b6f0f97c196a5a0a04bc2ad8e90e74b2.jpg'},
+    'Vitamin Pile': {'count': 25, 'expiry_date': '2026-12-31', 'image': 'https://th.bing.com/th/id/OIP._uhVyRxmnFyduBZTmSVq0gHaHa?rs=1&pid=ImgDetMain'}
+}
+humidity = 30
+temperature = 22
+
+@app.route('/', methods=['GET'])
+def index():
+    return render_template('index.html', stock=stock, humidity=humidity, temperature=temperature)
+
+@app.route('/update_stock', methods=['POST'])
+def update_stock():
+    item = request.form['item']
+    count = int(request.form['stock_count'])
+    expiry_date = request.form['expiry_date']
+    # If the item already exists, update the count and expiry date
+    if item in stock:
+        stock[item]['count'] = count
+        stock[item]['expiry_date'] = expiry_date
+    else:
+        # Otherwise, add the new item with a placeholder image
+        stock[item] = {'count': count, 'expiry_date': expiry_date, 'image': 'static/placeholder_image.webp'}
+    return render_template('index.html', stock=stock, humidity=humidity, temperature=temperature)
+
+if __name__ == "__main__":
+    app.run(debug=True, host='127.0.0.1', port=5001)
+
+
