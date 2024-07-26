@@ -29,6 +29,9 @@ GPIO.setup(27,GPIO.IN) #GPIO27 as Echo
 
 token = "7149694600:AAHor-sOzlvoK31bEhiclzTbaA0ZZdVzQlc"
 chat_id='6202818384'
+api_key = ''
+
+instance = dht11.DHT11(pin=21)
 
 reader = SimpleMFRC522()
 auth_list = ['660319679370', '168851789560'] #put the content of tags into this list
@@ -53,24 +56,6 @@ for j in range(4):
 LCD = I2C_LCD_driver.lcd() #instantiate an lcd object, call it LCD
 LCD.backlight(1)
 
-product_dict ={
-    "1":{
-        "name":"Panadol with Optizorb Caplets",
-        "price":7.9,
-        "quantity":15
-    },
-    "2":{
-        "name":"Hansaplast Plasters",
-        "price":2.7,
-        "quantity":14
-    },
-    "3":{
-        "name":"Whisper Wings Pads",
-        "price":6.2,
-        "quantity":12
-    }
-}
-
 def init_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
@@ -78,7 +63,7 @@ def init_db():
     data = [
         (1,"Panadol with Optizorb Caplets",7.9,15),
         (2,"Hansaplast Plasters",2.7,14),
-        (3,"Whisper Wiings Pads",6.2,12)
+        (3,"Whisper Wings Pads",6.2,12)
     ]
     c.executemany("INSERT OR IGNORE INTO products VALUES(?,?,?,?)", data)
     c.execute('''
@@ -97,7 +82,7 @@ def beep(dc,duration):
     sleep(duration) #in seconds
     buzzer_pwm.stop()
     
-def dispense(dc,duration):
+def dispense(duration):
     #turn motor a certain way to dispense the product
     #m=20 or any number)
     #my_pwm.start(m)
@@ -147,40 +132,29 @@ def lcd(content,line,*offset):
     
 def clear_lcd():
     LCD.lcd_clear()
-    
+        
 def display_item_price(i):
-    if str(i) in product_dict:
-        print("display_item_price works. Key pressed: ",i," Product: ", product_dict[str(i)]["price"])
-        return product_dict[str(i)]["price"]
-    else:
-        return -1
-    
-def display_item_price1(i):
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
     i = str(i)
     c.execute("SELECT COUNT (1) FROM products WHERE id = ?",i)
     res = c.fetchone()[0]
+    print(res,"|",type(res))
     c.execute("SELECT quantity FROM products WHERE id=?", i)   
     res2 = c.fetchone()[0]
+    print(res,"|",type(res))
     if res > 0 & res2 > 0:  
         c.execute("SELECT price FROM products WHERE id=?", i)   
-        price = c.fetchall() 
+        price = c.fetchone()[0]
         conn.close()
-        print (price,"|",type(price))
-        for e in price:
-            p = float(e[0])
+        p = float(price)
         return p
     else:
         conn.close()
         return -1
 
-def change_item_count(i):
-    product_dict[str(i)]["quantity"]-=1
-    print("change_item_count works. New item quantity: ",product_dict[str(i)]["quantity"])
-    return 0
 
-def change_item_count1(i):
+def change_item_count(i):
     conn = sqlite3.connect('database.db')
     #checks if product is inside database
     c = conn.cursor()
@@ -188,45 +162,20 @@ def change_item_count1(i):
     c.execute("SELECT COUNT (1) FROM products WHERE id = ?",i)
     res = c.fetchone()[0]
     if res > 0:  
-        q1 = c.execute("SELECT quantity FROM products WHERE id=?", i)
-        old_quant = c.fetchall()
-        for e in old_quant:
-            old_q = int(e[0]) 
+        c.execute("SELECT quantity FROM products WHERE id=?", i)
+        old_quant = c.fetchone()[0]
+        old_q = int(old_quant) 
         new_q = old_q -1
         c.execute("UPDATE products SET quantity = ? WHERE id = ?", (new_q, i))
         conn.commit()
         conn.close()
-        return (new_q)
+        return new_q
     else:
         conn.close()
         return -1
 
-def payment(i):
-    while True:
-        #print("Hold card near the reader to check if it is in the database")
-        id = str(reader.read_id())
-        beep(100,0.5)
-        #f = open("authlist.txt", "r+")
-        #if f.mode == "r+":
-        #      auth=f.read()
-        if id in auth_list: #if id in auth
-              #number = auth.split('\n')
-              #pos = number.index(id)
-              #print("Card with UID", id, "found in database entry #", pos, "; access granted")
-            res = product_dict[str(i)]["price"]
-            if account[id] <= res:
-                account[id]-= res
-                print("Enough credit on ",id)
-                return 0
-            else:
-                print("Not enough credit on ",id)
-                return 1
-        else:
-              print("Card with UID ", id, " not found in database; access denied")
-              return 1
-          
-def payment1(key_pressed):
-    #make sure payment is made
+         
+def payment(key_pressed):
     #read rfid card and deduct amount
     while True:
         #print("Hold card near the reader to check if it is in the database")
@@ -236,18 +185,15 @@ def payment1(key_pressed):
         #if f.mode == "r+":
         #      auth=f.read()
         if id in auth_list: #if id in auth
-              #number = auth.split('\n')
-              #pos = number.index(id)
-              #print("Card with UID", id, "found in database entry #", pos, "; access granted")
             conn = sqlite3.connect('database.db')
             c = conn.cursor()
             res = c.execute("SELECT price FROM products WHERE id= ?",str(key_pressed))
-            res = c.fetchall()
+            res = c.fetchone()[0]
             conn.close
-            for e in res:
-                r=float(e[0])
+            r = float(res)
             if account[id] <= r:
                 account[id]-= r
+                print(id," has $",account[id]," left")
                 return 0
             else:
                 return 1
@@ -259,27 +205,39 @@ def send_message(key):
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
     key = str(key)
-    n = c.execute("SELECT id FROM products WHERE id = ?",key)
-    q = c.execute("SELECT quantity FROM products WHERE id =?",key)
-    num = c.fetchone()
-    for i in num:
-        numnum = int(i)
+    c.execute("SELECT id FROM products WHERE id = ?",key)
+    c.execute("SELECT quantity FROM products WHERE id =?",key)
+    n = c.fetchone()
+    for i in n:
+        num = int(i)
     conn.close
     t1 = datetime.now()
     t2 = t1.strftime('%Y-%m-%d %H:%M:%S')
-    message = "A purchase was made on {} for item {}. New quantity: {}".format(t2, key, numnum)
-    url = "https://api.telegram.org/bot{}/sendMessage?chat_id={}&text={}".format(token, chat_id,message)
+    message = "A purchase was made on {} for item {}. New quantity: {}".format(t2, key, num)
+    url = "https://api.telegram.org/bot{}/sendMessage?chat_id={}&text={}".format(token, chat_id, message)
     print(requests.get(url).json)
           
 def website():
     app = Flask(__name__)
     @app.route('/')
     def website():
-        return render_template('/home/pi/Desktop/IoTe/Training_Kit/Templates/index1.html')
+        return render_template('/home/pi/Desktop/IoTe/Training_Kit/Templates/index1.html')  
     if __name__=='__main__':
         app.run(host = '172.23.45.86', port= 8080)
 
-    
+def read_moisture():
+    while True: #keep reading
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+        result = instance.read()
+        t1 = datetime.now()
+        t2 = t1.strftime('%Y-%m-%d %H:%M:%S')
+        if result.is_valid(): #print datetime & sensor values
+            print(result.humidity,"|",result.temperature,"|",t2)
+            c.execute('INSERT INTO temp_humi (humi, temp, timestamp) VALUES (?, ?, ?)',(result.humidity, result.temperature, t2))
+            conn.close()
+            resp = requests.get("https://api.thingspeak.com/update?api_key=%s&field1=%s&field2=%s"%(api_key, result.humidity, result.temperature))
+        time.sleep(20) #interval between uploads for free channel
     
 def vending_machine():
     #ultrasound detect for customer
@@ -299,19 +257,19 @@ def vending_machine():
     #check what button is pressed
             key_pressed = keypad()
     #find the product coresponding to key_pressed
-            price=display_item_price1(key_pressed)
+            price=display_item_price(key_pressed)
             clear_lcd()
     #display price on lcd
             while price == -1:
                 lcd("Item not",1)
                 lcd("available",2)
                 key_pressed = keypad()
-                price=display_item_price1(key_pressed)
+                price=display_item_price(key_pressed)
             clear_lcd()
             lcd("${:.2f}".format(price),1)
             lcd("Tap to pay",2)
     #transaction
-            code=payment1(key_pressed)
+            code=payment(key_pressed)
             if code != 0:
                 clear_lcd()
                 lcd("Payment",1)              
@@ -320,7 +278,7 @@ def vending_machine():
                 clear_lcd()
                 lcd("Success",1)
     #change item count
-                change_item_count1(key_pressed)
+                change_item_count(key_pressed)
     #send telegram message
                 #send_message(key_pressed)
     #LED lights up
@@ -338,15 +296,15 @@ def vending_machine():
 while True:
     # create threads
     thread1 = threading.Thread(target=vending_machine)
-    #thread2 = threading.Thread(target=read_moisture)
+    thread2 = threading.Thread(target=read_moisture)
     thread3 = threading.Thread(target=website)
 
     # start threads
     thread1.start()
-    #thread2.start()
+    thread2.start()
     thread3.start()
 
     # wait for threads to finish
     thread1.join()
-    #thread2.join()
+    thread2.join()
     thread3.join()
